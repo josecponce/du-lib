@@ -1,5 +1,5 @@
 ---@type table<string, ItemGroup>
-ITEM_GROUPS = require('lib/data/raw/ItemGroupsRaw')
+ITEM_GROUPS = require('../data/raw/ItemGroupsRaw')
 
 I_GROUP_FUEL = 'Fuels'
 I_GROUP_ATMO_FUEL = 'Atmospheric Fuels'

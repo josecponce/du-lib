@@ -1,3 +1,6 @@
+require('../requires/service')
+require('../requires/dataHud')
+
 ---@class DbEntry
 ---@field key string
 ---@field label string

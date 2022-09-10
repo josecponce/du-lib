@@ -1,3 +1,7 @@
+require('../requires/service')
+require('../crafting/SchematicCopiesManager')
+require('../crafting/RecipeManager')
+
 ---@class CraftingCostDirect
 ---@field itemId number
 ---@field quantity number

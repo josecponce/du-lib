@@ -1,3 +1,5 @@
+require('../requires/service')
+
 ---@class MarkerManager : Service
 MarkerManager = {}
 MarkerManager.__index = MarkerManager

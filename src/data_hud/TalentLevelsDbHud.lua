@@ -1,3 +1,7 @@
+require('../requires/service')
+require('../general/DatabankHud')
+require('../data/Talents')
+
 ---@class TalentLevelsDbHud : Service
 TalentLevelsDbHud = {}
 TalentLevelsDbHud.__index = TalentLevelsDbHud

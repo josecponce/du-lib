@@ -1,3 +1,5 @@
+require('../requires/service')
+
 ---@class WaypointManager
 WaypointManager = {}
 WaypointManager.__index = WaypointManager

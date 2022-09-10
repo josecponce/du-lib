@@ -1,3 +1,7 @@
+require('../requires/service')
+require('../data/Talents')
+require('../data/ItemGroups')
+
 ---@class ItemTalentsEffect
 ---@field timeDiscount number
 ---@field inputFixedDiscount number
@@ -125,7 +129,6 @@ local function adjustRecipes(system, talentsEffects, permit)
 end
 
 ---@class RecipeManager : Service
----@field __index RecipeManager
 RecipeManager = {}
 RecipeManager.__index = RecipeManager
 

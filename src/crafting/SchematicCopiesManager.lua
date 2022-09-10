@@ -1,3 +1,5 @@
+require('../requires/service')
+
 ---@class SchematicCopy
 ---@field id number
 ---@field products number[]

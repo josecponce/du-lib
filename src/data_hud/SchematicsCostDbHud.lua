@@ -1,3 +1,7 @@
+require('../requires/service')
+require('../general/DatabankHud')
+require('../crafting/SchematicCopiesManager')
+
 ---@class SchematicsCostDbHud : Service
 SchematicsCostDbHud = {}
 SchematicsCostDbHud.__index = SchematicsCostDbHud

@@ -1,5 +1,4 @@
 ---@class State
----@field __index
 State = {}
 State.__index = State
 

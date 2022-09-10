@@ -1,6 +1,8 @@
+---@param s string
+---@param delimiter string
 ---@return string[]
 local function strSplit(s, delimiter)
-    result = {};
+    local result = {};
     for match in (s..delimiter):gmatch("(.-)"..delimiter) do
         table.insert(result, match);
     end

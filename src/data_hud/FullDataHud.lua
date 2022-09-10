@@ -1,3 +1,7 @@
+require('../requires/service')
+require('../data_hud/FullDataHudData')
+local duCurrentDateTime = require('../utils/fn_duCurrentDateTime')
+
 ---@class FullDataHudEvents
 FULL_DATA_HUD_EVENTS = {}
 ---handler: func(self, groupIndex)
@@ -20,8 +24,6 @@ FULL_DATA_HUD_EVENTS.GROUP_ACTION_LEFT = 'onGroupActionLeft'
 ---@class FullDataHud : Service
 FullDataHud = {}
 FullDataHud.__index = FullDataHud
-
-local duCurrentDateTime = require('utils/fn_duCurrentDateTime')
 
 local function getHudHelpHtml(title)
     local year, month, day, hour, minute, second, _, _, _, _, _, _ = duCurrentDateTime(nil)

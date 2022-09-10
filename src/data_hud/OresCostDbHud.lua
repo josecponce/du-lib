@@ -1,3 +1,7 @@
+require('../requires/service')
+require('../data/ItemGroups')
+require('../general/DatabankHud')
+
 ---@class OresCostDbHud : Service
 OresCostDbHud = {}
 OresCostDbHud.__index = OresCostDbHud

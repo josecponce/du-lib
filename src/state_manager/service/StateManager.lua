@@ -1,5 +1,4 @@
 ---@class StateManager
----@field __index
 StateManager = {}
 StateManager.__index = StateManager
 
