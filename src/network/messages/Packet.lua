@@ -1,8 +1,9 @@
-local serde = require('../requires/serde')
+local serde = require('../../requires/serde')
 
 ---@class Packet
 ---@field type string
 ---@field source string
+---@field dest string
 ---@field data string
 Packet = {}
 Packet.TYPE_OPEN = "OPEN"
@@ -26,13 +27,15 @@ end
 
 ---@param type "OPEN" | "ACK OPEN" | "CLOSE" | "ACK CLOSE" | "DATA" | "ACK DATA"
 ---@param source string
+---@param dest string
 ---@param data string
----@overload fun(type: "OPEN" | "ACK OPEN" | "CLOSE" | "ACK CLOSE" | "DATA" | "ACK DATA", source: string): Packet
+---@overload fun(type: "OPEN" | "ACK OPEN" | "CLOSE" | "ACK CLOSE" | "DATA" | "ACK DATA", source: string, dest: string): Packet
 ---@return Packet
-function Packet.new(type, source, data)
+function Packet.new(type, source, dest, data)
     return --[[---@type]] {
         type = type,
         source = source,
+        dest = dest,
         data = data
     }
 end
