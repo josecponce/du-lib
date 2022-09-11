@@ -9,11 +9,11 @@ function DuLuacUtils.addListener(target, event, handlers)
 end
 
 function DuLuacUtils.createHandler(handlers)
-    return function(_, key)
+    return function(_, key, param)
         local handler = handlers[key]
 
         if handler then
-            handler()
+            handler(param)
         end
     end
 end

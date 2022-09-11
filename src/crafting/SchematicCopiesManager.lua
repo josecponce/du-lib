@@ -25,7 +25,6 @@ SCHEMATIC_COPIES_MANAGER_EVENT = {}
 SCHEMATIC_COPIES_MANAGER_EVENT.REFRESH = 'onRefresh'
 
 ---@class SchematicCopiesManager : Service
----@field __index SchematicCopiesManager
 SchematicCopiesManager = {}
 SchematicCopiesManager.__index = SchematicCopiesManager
 
