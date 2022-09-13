@@ -8,7 +8,7 @@ NetworkService.__index = NetworkService
 
 ---@param error string
 ---@param packet Packet
-local function printTcpError(error, packet)
+local function printNetworkError(error, packet)
     system.print('Network Error: ' .. error .. ': "' .. Packet.serialize(packet) .. '"')
 end
 
@@ -48,16 +48,10 @@ function NetworkService.new(emitter, receiver, listenChannel, timeout, dataSendB
     local lastMessageTime
     local expectingDataAck
     local expectingOpenAck
-    ---@type table<number, Packet>
-    local dataSendBuffer = {}
-    local dataSendBufferReadIndex = 1
-    local dataSendBufferWriteIndex = 1
-    ---@type table<number, Packet>
-    local signalSendBuffer = {}
-    local signalSendBufferReadIndex = 1
-    local signalSendBufferWriteIndex = 1
+
+    local dataSendBuffer = --[[---@type CircularBuffer<Packet>]] CircularBuffer.new(dataSendBufferSize)
     --enough for 10s at 60fps
-    local signalSendBufferSize = 600
+    local signalSendBuffer = --[[---@type CircularBuffer<Packet>]] CircularBuffer.new(600)
 
     function self.connectionOpen()
         return remoteChannel and not expectingOpenAck
@@ -66,19 +60,14 @@ function NetworkService.new(emitter, receiver, listenChannel, timeout, dataSendB
     local connectionOpen = self.connectionOpen
 
     ---@param type "OPEN" | "ACK OPEN" | "CLOSE" | "ACK CLOSE" | "DATA" | "ACK DATA"
-    ---@param buffer table<number, Packet>
-    ---@param bufferWriteIndex number
-    ---@param bufferSize number
+    ---@param buffer CircularBuffer<Packet>
     ---@param data string
-    ---@overload fun(type: "OPEN" | "ACK OPEN" | "CLOSE" | "ACK CLOSE" | "DATA" | "ACK DATA", buffer: table<number, Packet>, bufferWriteIndex: number, bufferSize: number): number
-    ---@return number new bufferWriteIndex
-    local function queuePacketSend(type, buffer, bufferWriteIndex, bufferSize, data)
-        local writeSlot = buffer[bufferWriteIndex]
-        if writeSlot then
+    ---@overload fun(type: "OPEN" | "ACK OPEN" | "CLOSE" | "ACK CLOSE" | "DATA" | "ACK DATA", buffer: CircularBuffer<Packet>): void
+    local function queuePacketSend(type, buffer, data)
+        local packet = Packet.new(type, listenChannel, remoteChannel, data)
+        if not buffer.push(packet) then
             fail('Network Error: Failed to send message due to send buffer overflow.')
         end
-        buffer[bufferWriteIndex] = Packet.new(type, listenChannel, remoteChannel, data)
-        return ((bufferWriteIndex + 1) % bufferSize) + 1
     end
 
     local function updateLastMessageTime()
@@ -96,14 +85,12 @@ function NetworkService.new(emitter, receiver, listenChannel, timeout, dataSendB
         expectingDataAck = false
         expectingOpenAck = false
 
-        dataSendBuffer = {}
-        dataSendBufferReadIndex = 1
-        dataSendBufferWriteIndex = 1
+        dataSendBuffer = --[[---@type CircularBuffer<Packet>]] CircularBuffer.new(dataSendBufferSize)
     end
 
     ---@param reason string
     local function closeRemoteConnection(reason)
-        signalSendBufferWriteIndex = queuePacketSend(Packet.TYPE_CLOSE, signalSendBuffer, signalSendBufferWriteIndex, signalSendBufferSize, reason)
+        queuePacketSend(Packet.TYPE_CLOSE, signalSendBuffer, reason)
         resetConnectionState()
     end
 
@@ -112,48 +99,42 @@ function NetworkService.new(emitter, receiver, listenChannel, timeout, dataSendB
         self:triggerEvent(NETWORK_SERVICE_EVENTS.TIMEOUT)
     end
 
-    ---@param buffer table<number, Packet>
-    ---@param bufferReadIndex number
-    ---@param bufferSize number
-    ---@return number new bufferReadIndex
-    local function handleSend(buffer, bufferReadIndex, bufferSize)
-        local packet = buffer[bufferReadIndex]
-        buffer[bufferReadIndex] = nil
+    ---@param buffer CircularBuffer<Packet>
+    local function handleSend(buffer)
+        local packet = buffer.pop()
 
         if packet.type == Packet.TYPE_DATA then
             expectingDataAck = true
         end
         emitter.send(packet.dest, Packet.serialize(packet))
-
-        return ((bufferReadIndex + 1) % bufferSize) + 1
     end
 
     local function update()
-        if signalSendBuffer[signalSendBufferReadIndex] then
-            signalSendBufferReadIndex = handleSend(signalSendBuffer, signalSendBufferReadIndex, signalSendBufferSize)
+        if signalSendBuffer.dataAvailable() then
+            handleSend(signalSendBuffer)
             return
         end
         if not connectionOpen() then
             return
         end
-        --Close connection if not alive
+        --Close connection if no messages in "timeout". Implement keepalive at some point?
         if system.getArkTime() - lastMessageTime > timeout then
             handleConnectionTimeout()
-        elseif not expectingDataAck and dataSendBuffer[dataSendBufferReadIndex] then
-            dataSendBufferReadIndex = handleSend(dataSendBuffer, dataSendBufferReadIndex, dataSendBufferSize)
+        elseif not expectingDataAck and dataSendBuffer.dataAvailable() then
+            handleSend(dataSendBuffer)
         end
     end
 
     ---@param packet Packet
     local function handleOpenConnection(packet)
         if connectionOpen() then
-            printTcpError('Connection open attempt received while connection already open', packet)
+            printNetworkError('Connection open attempt received while connection already open', packet)
         elseif not packet.source or packet.source:len() == 0 then
-            printTcpError('Connection open request received without client channel provided', packet)
+            printNetworkError('Connection open request received without client channel provided', packet)
         else
             remoteChannel = packet.source
             updateLastMessageTime()
-            signalSendBufferWriteIndex = queuePacketSend(Packet.TYPE_ACK_OPEN, signalSendBuffer, signalSendBufferWriteIndex, signalSendBufferSize)
+            queuePacketSend(Packet.TYPE_ACK_OPEN, signalSendBuffer)
             self:triggerEvent(NETWORK_SERVICE_EVENTS.OPEN, packet.source)
         end
     end
@@ -161,11 +142,11 @@ function NetworkService.new(emitter, receiver, listenChannel, timeout, dataSendB
     ---@param packet Packet
     local function handleOpenAck(packet)
         if connectionOpen() then
-            printTcpError('Connection Open Ack received while connection already open', packet)
+            printNetworkError('Connection Open Ack received while connection already open', packet)
         elseif not expectingOpenAck then
-            printTcpError('Connection Open Ack received while no connection attempt was in progress', packet)
+            printNetworkError('Connection Open Ack received while no connection attempt was in progress', packet)
         elseif not fromCurrentSource(packet) then
-            printTcpError('Connection Open Ack received from another source while connection attempt was in progress', packet)
+            printNetworkError('Connection Open Ack received from another source while connection attempt was in progress', packet)
         else
             updateLastMessageTime()
             expectingOpenAck = false
@@ -176,11 +157,11 @@ function NetworkService.new(emitter, receiver, listenChannel, timeout, dataSendB
     ---@param packet Packet
     local function handleCloseConnection(packet)
         if not connectionOpen() then
-            printTcpError('Connection close attempt received while no connection is open', packet)
+            printNetworkError('Connection close attempt received while no connection is open', packet)
         elseif not fromCurrentSource(packet) then
-            printTcpError('Connection close attempt received from another source while connection open', packet)
+            printNetworkError('Connection close attempt received from another source while connection open', packet)
         else
-            signalSendBufferWriteIndex = queuePacketSend(Packet.TYPE_ACK_CLOSE, signalSendBuffer, signalSendBufferWriteIndex, signalSendBufferSize)
+            queuePacketSend(Packet.TYPE_ACK_CLOSE, signalSendBuffer)
             resetConnectionState()
             self:triggerEvent(NETWORK_SERVICE_EVENTS.CLOSE, packet.source)
         end
@@ -194,23 +175,23 @@ function NetworkService.new(emitter, receiver, listenChannel, timeout, dataSendB
     ---@param packet Packet
     local function handleData(packet)
         if not connectionOpen() then
-            printTcpError('Data received while no connection is open', packet)
+            printNetworkError('Data received while no connection is open', packet)
         elseif not fromCurrentSource(packet) then
-            printTcpError('Data received from another while connection open', packet)
+            printNetworkError('Data received from another while connection open', packet)
         else
             updateLastMessageTime()
-            signalSendBufferWriteIndex = queuePacketSend(Packet.TYPE_ACK_DATA, signalSendBuffer, signalSendBufferWriteIndex, signalSendBufferSize)
+            queuePacketSend(Packet.TYPE_ACK_DATA, signalSendBuffer)
             self:triggerEvent(NETWORK_SERVICE_EVENTS.DATA, packet.source, packet.data)
         end
     end
 
     local function handleDataAck(packet)
         if not connectionOpen() then
-            printTcpError('Data Ack received while no connection is open', packet)
+            printNetworkError('Data Ack received while no connection is open', packet)
         elseif not fromCurrentSource(packet) then
-            printTcpError('Data Ack received from another while connection open', packet)
+            printNetworkError('Data Ack received from another while connection open', packet)
         elseif not expectingDataAck then
-            printTcpError('Data Ack received unexpectedly', packet)
+            printNetworkError('Data Ack received unexpectedly', packet)
         else
             updateLastMessageTime()
             expectingDataAck = false
@@ -235,7 +216,7 @@ function NetworkService.new(emitter, receiver, listenChannel, timeout, dataSendB
         if handler then
             handler(packet)
         else
-            printTcpError('Message received with unexpected format', packet)
+            printNetworkError('Message received with unexpected format', packet)
         end
     end
 
@@ -245,14 +226,15 @@ function NetworkService.new(emitter, receiver, listenChannel, timeout, dataSendB
             local lastChar = math.min(i + 399)
             local messagePart = message:sub(i, lastChar)
 
-            dataSendBufferWriteIndex = queuePacketSend(Packet.TYPE_DATA, dataSendBuffer, dataSendBufferWriteIndex, dataSendBufferSize, messagePart)
+            queuePacketSend(Packet.TYPE_DATA, dataSendBuffer, messagePart)
         end
     end
 
+    ---@param newRemoteChannel string
     function self.connect(newRemoteChannel)
         expectingOpenAck = true
         remoteChannel = newRemoteChannel
-        signalSendBufferWriteIndex = queuePacketSend(Packet.TYPE_OPEN, signalSendBuffer, signalSendBufferWriteIndex, signalSendBufferSize)
+        queuePacketSend(Packet.TYPE_OPEN, signalSendBuffer)
         updateLastMessageTime()
     end
 
