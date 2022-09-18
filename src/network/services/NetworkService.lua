@@ -9,7 +9,11 @@ NetworkService.__index = NetworkService
 ---@param error string
 ---@param packet Packet
 local function printNetworkError(error, packet)
-    system.print('Network Error: ' .. error .. ': "' .. Packet.serialize(packet) .. '"')
+    local msg = 'Network Error: ' .. error
+    if packet then
+        msg = msg .. ': "' .. Packet.serialize(packet) .. '"'
+    end
+    system.print(msg)
 end
 
 ---@param errorMessage string
@@ -34,6 +38,8 @@ NETWORK_SERVICE_EVENTS.DATA = 'onData'
 NETWORK_SERVICE_EVENTS.ACK_DATA = 'onAckData'
 ---handler: func(self)
 NETWORK_SERVICE_EVENTS.TIMEOUT = 'onTimeout'
+---handler: func(self, source)
+NETWORK_SERVICE_EVENTS.PING = 'onPing'
 
 ---@param emitter Emitter
 ---@param receiver Receiver
@@ -199,6 +205,10 @@ function NetworkService.new(emitter, receiver, listenChannel, timeout, dataSendB
         end
     end
 
+    local function handlePing(packet)
+        self:triggerEvent(NETWORK_SERVICE_EVENTS.PING, packet.source)
+    end
+
     ---@type table<string, fun(packet: Packet): void>
     local messageHandlers = {
         [Packet.TYPE_OPEN] = handleOpenConnection,
@@ -206,7 +216,8 @@ function NetworkService.new(emitter, receiver, listenChannel, timeout, dataSendB
         [Packet.TYPE_CLOSE] = handleCloseConnection,
         [Packet.TYPE_ACK_CLOSE] = handleCloseAck,
         [Packet.TYPE_DATA] = handleData,
-        [Packet.TYPE_ACK_DATA] = handleDataAck
+        [Packet.TYPE_ACK_DATA] = handleDataAck,
+        [Packet.TYPE_PING] = handlePing --don't care about pings, they're there to wake up the remotes only
     }
 
     ---@param message string
@@ -230,6 +241,13 @@ function NetworkService.new(emitter, receiver, listenChannel, timeout, dataSendB
         end
     end
 
+    function self.ping(channel)
+        local packet = Packet.new(Packet.TYPE_PING, listenChannel, channel)
+        if not signalSendBuffer.push(packet) then
+            fail('Network Error: Failed to send ping message due to send buffer overflow.')
+        end
+    end
+
     ---@param newRemoteChannel string
     function self.connect(newRemoteChannel)
         expectingOpenAck = true
@@ -240,7 +258,7 @@ function NetworkService.new(emitter, receiver, listenChannel, timeout, dataSendB
 
     function self.close()
         if not connectionOpen() then
-            fail('Network Error: Attempted to close connection while no connection was open')
+            printNetworkError('Network Error: Attempted to close connection while no connection was open', nil)
         end
 
         closeRemoteConnection('OK')
